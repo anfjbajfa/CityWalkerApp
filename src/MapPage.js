@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
 import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
@@ -10,13 +10,13 @@ import Legend from "@arcgis/core/widgets/Legend";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import Graphic from "@arcgis/core/Graphic";
 import "@arcgis/core/assets/esri/themes/light/main.css";
+import Oauth2 from "./Oauth2Login.js"; 
 
 function MapPage() {
-  console.log("hello world");
   const mapDiv = useRef(null);
   const viewRef = useRef(null);
 
-  // 自定义面板的 DOM 引用和 Expand 实例引用
+  // 自定义面板和 Expand 实例引用
   const expandPanelRef = useRef(null);
   const customPanelExpandRef = useRef(null);
 
@@ -25,6 +25,15 @@ function MapPage() {
 
   const [routeData, setRouteData] = useState(null);
   const [selectedRoutes, setSelectedRoutes] = useState([]);
+
+  // 控制 OAuth2 弹窗和登录状态
+  const [showOauth2, setShowOauth2] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // 新增三个 state 保存过滤条件
+  const [filterDistance, setFilterDistance] = useState("");
+
+  const [filterRating, setFilterRating] = useState("");
 
   useEffect(() => {
     // 1) 创建地图和视图
@@ -36,7 +45,7 @@ function MapPage() {
       zoom: 13,
     });
 
-    // 2) 常用控件：Locate + Search + Legend
+    // 2) 添加常用控件：Locate、Search、Legend
     const locateBtn = new Locate({ view: viewRef.current });
     const searchBar = new Search({ view: viewRef.current });
     const searchBarExpand = new Expand({
@@ -50,14 +59,13 @@ function MapPage() {
       content: legend,
       expand: false,
     });
-
     viewRef.current.when(() => {
       viewRef.current.ui.add(locateBtn, "top-left");
       viewRef.current.ui.add(searchBarExpand, "top-left");
       viewRef.current.ui.add(legendExpand, "bottom-right");
     });
 
-    // 3) 侧道 (Sidewalk) 图层
+    // 3) 添加侧道 (Sidewalk) 图层
     const madisonPathFeatureLayer = new FeatureLayer({
       url: "https://services.arcgis.com/HRPe58bUyBqyyiCt/arcgis/rest/services/MadisonSidewalk/FeatureServer",
       renderer: {
@@ -72,7 +80,7 @@ function MapPage() {
     });
     map.add(madisonPathFeatureLayer);
 
-    // 4) Route 图层（通过 definitionExpression 隐藏已有要素）
+    // 4) 添加 Route 图层（利用 definitionExpression 隐藏已有要素）
     const routeRenderer = {
       type: "simple",
       symbol: { type: "simple-line", color: "#007ac2", width: "2px" },
@@ -101,38 +109,16 @@ function MapPage() {
       url: "https://services.arcgis.com/HRPe58bUyBqyyiCt/arcgis/rest/services/RouteLayer/FeatureServer/0",
       outFields: ["*"],
       renderer: routeRenderer,
-      definitionExpression: "1=0", // 不显示已有要素
+      definitionExpression: "1=0", // 初始不显示已有要素
       id: "routeLayer",
     });
     map.add(routeLayerRef.current);
 
-    // 5) Editor Widget
-    const editor = new Editor({
-      view: viewRef.current,
-      allowedWorkflows: ["create", "update"],
-      layerInfos: [
-        {
-          layer: routeLayerRef.current,
-          fieldConfig: [
-            { name: "RouteName", label: "路线名称" },
-            { name: "rating", label: "评分 (1-5)" },
-            { name: "description", label: "备注" },
-          ],
-        },
-      ],
-    });
-    const editorExpand = new Expand({
-      view: viewRef.current,
-      content: editor,
-      expand: false,
-    });
-    viewRef.current.ui.add(editorExpand, "top-right");
-
-    // 6) SelectedRoutes 的 GraphicsLayer
+    // 6) 添加 SelectedRoutes 的 GraphicsLayer
     selectedRoutesLayerRef.current = new GraphicsLayer();
     map.add(selectedRoutesLayerRef.current);
 
-    // 7) 使用 Expand 包裹自定义面板 (expandPanelRef)
+    // 7) 使用 Expand 包裹自定义面板
     const customPanelExpand = new Expand({
       view: viewRef.current,
       content: expandPanelRef.current,
@@ -143,26 +129,22 @@ function MapPage() {
     viewRef.current.ui.add(customPanelExpand, "bottom-left");
     customPanelExpandRef.current = customPanelExpand;
 
-    // 8) 添加点击事件监听，单击高亮，双击直接删除
+    // 8) 添加点击事件监听：单击高亮、双击删除图形
     const clickHandler = viewRef.current.on("click", (event) => {
       viewRef.current.hitTest(event).then((response) => {
         if (response.results.length) {
           response.results.forEach((result) => {
-            // 判断点击的图形是否属于 selectedRoutesLayerRef
             if (
               result.graphic &&
               result.graphic.layer === selectedRoutesLayerRef.current
             ) {
-              // 判断图形是否已高亮（默认为 false）
               const isHighlighted = result.graphic.attributes?.isHighlighted;
               if (!isHighlighted) {
-                // 修改符号为高亮样式（黄色加粗）
                 result.graphic.symbol = {
                   type: "simple-line",
                   color: "yellow",
                   width: "3px",
                 };
-                // 设置标记属性
                 if (!result.graphic.attributes) {
                   result.graphic.attributes = {};
                 }
@@ -174,19 +156,15 @@ function MapPage() {
       });
     });
 
-    // 双击事件：直接删除图形
     const doubleClickHandler = viewRef.current.on("double-click", (event) => {
-      // 阻止默认的双击缩放操作
       event.stopPropagation();
       viewRef.current.hitTest(event).then((response) => {
         if (response.results.length) {
           response.results.forEach((result) => {
-            // 判断点击的图形是否属于 selectedRoutesLayerRef
             if (
               result.graphic &&
               result.graphic.layer === selectedRoutesLayerRef.current
             ) {
-              // 直接删除该图形
               selectedRoutesLayerRef.current.remove(result.graphic);
             }
           });
@@ -194,16 +172,44 @@ function MapPage() {
       });
     });
 
-    // 清理：移除事件监听器和销毁视图
+    // 清理：组件卸载时移除事件监听并销毁视图
     return () => {
       if (viewRef.current) {
         clickHandler.remove();
+        doubleClickHandler.remove();
         viewRef.current.destroy();
       }
     };
   }, []);
 
-  // 点击按钮后查询后端所有数据
+  // 当 isLoggedIn 变为 true 后创建并添加 Editor widget
+  useEffect(() => {
+    if (isLoggedIn && viewRef.current && routeLayerRef.current) {
+      const editor = new Editor({
+        view: viewRef.current,
+        allowedWorkflows: ["create", "update"],
+        layerInfos: [
+          {
+            layer: routeLayerRef.current,
+            fieldConfig: [
+              { name: "RouteName", label: "routename" },
+              { name: "rating", label: "rate(1-5)" },
+              { name: "description", label: "description" },
+              { name:"height", label:"height" }
+            ],
+          },
+        ],
+      });
+      const editorExpand = new Expand({
+        view: viewRef.current,
+        content: editor,
+        expand: false,
+      });
+      viewRef.current.ui.add(editorExpand, "bottom-left");
+    }
+  }, [isLoggedIn]);
+
+  // 查询后端数据
   const fetchRouteData = () => {
     if (routeLayerRef.current) {
       routeLayerRef.current
@@ -213,7 +219,9 @@ function MapPage() {
           returnGeometry: true,
         })
         .then((result) => {
-          console.log("Fetched route data:", result.features);
+          result.features.forEach((feature) => {
+            console.log(feature.attributes);
+          });
           setRouteData(result.features);
         })
         .catch((err) => {
@@ -222,7 +230,6 @@ function MapPage() {
     }
   };
 
-  // 切换某条 Route 的选中状态（用于列表选择）
   const toggleRouteSelection = (feature) => {
     const objectId = feature.attributes.OBJECTID;
     setSelectedRoutes((prevSelected) => {
@@ -236,12 +243,10 @@ function MapPage() {
     });
   };
 
-  // 添加用户选中的 Route 到地图上（使用 GraphicsLayer 显示），同时关闭自定义面板
   const addSelectedRoutesToMap = () => {
     if (selectedRoutesLayerRef.current && selectedRoutes.length > 0) {
       selectedRoutesLayerRef.current.removeAll();
       selectedRoutes.forEach((feature) => {
-        // 创建图形时设置 isHighlighted 为 false
         const graphic = new Graphic({
           geometry: feature.geometry,
           symbol: {
@@ -259,26 +264,86 @@ function MapPage() {
     }
   };
 
+  // OAuth2 登录相关
+  const handleEditClick = () => {
+    if (!isLoggedIn) {
+      setShowOauth2(true);
+    }
+  };
+
+  const handleLoginSuccess = (credential) => {
+    console.log("MapPage get Credential successfully:", credential);
+    setIsLoggedIn(true);
+    setShowOauth2(false);
+    // 此处可以将 credential 保存到状态或上下文中，用于后续 API 请求认证
+  };
+
+  // 利用 useMemo 根据过滤条件筛选 routeData
+  const filteredRoutes = useMemo(() => {
+    if (!routeData) return [];
+    return routeData.filter((feature) => {
+      const { Shape__Length, height, rating } = feature.attributes;
+      return (
+        (!filterDistance || Shape__Length <= parseFloat(filterDistance)) &&
+
+        (!filterRating || rating >= parseFloat(filterRating))
+      );
+    });
+  }, [routeData, filterDistance, filterRating]);
+
   return (
     <>
       <div style={{ height: "100vh", width: "100%" }} ref={mapDiv} />
 
-      {/* 自定义面板，通过 Expand 弹出 */}
-      <div ref={expandPanelRef} style={{ padding: "10px" }}>
+      {/* 自定义面板 */}
+      <div ref={expandPanelRef} style={{ padding: "10px", maxHeight: "90vh", overflowY: "auto" }}>
         <button onClick={fetchRouteData}>Fetch Routes</button>
         <button onClick={addSelectedRoutesToMap}>Add Selected Routes</button>
+        {/* 如果未登录，点击编辑按钮触发登录 */}
+        {!isLoggedIn && (
+          <button onClick={handleEditClick}>Edit (Login required)</button>
+        )}
 
-        {routeData && routeData.length > 0 && (
+        {/* 添加过滤条件输入框 */}
+        <div style={{ marginTop: "10px" }}>
+          <h3>Filter Routes:</h3>
+          <div style={{ marginBottom: "5px" }}>
+            <label>
+              Max Distance:
+              <input
+                type="number"
+                value={filterDistance}
+                onChange={(e) => setFilterDistance(e.target.value)}
+                style={{ marginLeft: "5px", width: "80px" }}
+              />
+            </label>
+          </div>
+          
+          <div style={{ marginBottom: "5px" }}>
+            <label>
+              Min Rating:
+              <input
+                type="number"
+                value={filterRating}
+                onChange={(e) => setFilterRating(e.target.value)}
+                style={{ marginLeft: "5px", width: "80px" }}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* 展示过滤后的路线列表 */}
+        {filteredRoutes && filteredRoutes.length > 0 && (
           <div style={{ marginTop: "10px" }}>
             <h3>Available Routes:</h3>
             <ul style={{ listStyleType: "none", padding: 0 }}>
-              {routeData.map((feature) => {
-                const { RouteName, rating, description } = feature.attributes;
+              {filteredRoutes.map((feature) => {
+                const { RouteName, rating, description, height, Creator, Shape__Length } =
+                  feature.attributes;
                 const isSelected = selectedRoutes.some(
                   (item) =>
                     item.attributes.OBJECTID === feature.attributes.OBJECTID
                 );
-
                 return (
                   <li
                     key={feature.attributes.OBJECTID}
@@ -297,8 +362,11 @@ function MapPage() {
                       />
                       <strong>{RouteName || "Unnamed Route"}</strong>
                     </label>
+                    <div>Distance: {Shape__Length} m</div>
                     <div>Rating: {rating}</div>
                     <div>Description: {description}</div>
+                    <div>Height: {height}</div>
+                    <div>Creator: {Creator}</div>
                   </li>
                 );
               })}
@@ -306,6 +374,9 @@ function MapPage() {
           </div>
         )}
       </div>
+
+      {/* 条件渲染 OAuth2 登录弹窗 */}
+      {showOauth2 && <Oauth2 onLoginSuccess={handleLoginSuccess} />}
     </>
   );
 }

@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcity_walk_app=self.webpackChunkcity_walk_app||[]).push([[2671],{82671:(a,p,k)=>{k.r(p),k.d(p,{build:()=>c.b});k(4570),k(79138),k(21390),k(72790),k(64839),k(32307),k(70367);var c=k(61157)}}]);
