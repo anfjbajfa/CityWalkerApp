@@ -1,1 +1,0 @@
-"use strict";(self.webpackChunkcity_walk_app=self.webpackChunkcity_walk_app||[]).push([[1721],{61721:(i,u,a)=>{a.r(u),a.d(u,{build:()=>b.b,ribbonlineNumRoundJoinSubdivisions:()=>b.r});a(34981),a(26917),a(90080),a(3838),a(56906),a(17698),a(94192),a(80883),a(42451),a(95756),a(58350),a(21390),a(64839),a(43425),a(32307),a(66470),a(50125),a(91911),a(46259);var b=a(14623)}}]);
