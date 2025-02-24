@@ -5,7 +5,6 @@
 
 import React, { useEffect, useState } from "react";
 
-
 import OAuthInfo from "@arcgis/core/identity/OAuthInfo";
 import esriId from "@arcgis/core/identity/IdentityManager";
 
