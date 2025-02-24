@@ -2,7 +2,7 @@
   "name": "city-walk-app",
   "version": "0.1.0",
   "private": true,
-  
+  "homepage": "https://anfjbajfa.github.io/CityWalkerApp/",
   "dependencies": {
     "@arcgis/core": "^4.31.6",
     "cra-template": "1.2.0",
